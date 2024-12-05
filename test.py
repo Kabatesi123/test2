@@ -1,54 +1,93 @@
-import pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
 import streamlit as st
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score
+import io
 
-# Create the dataset
-data = {
-    "Math": [45, 75, 60, 90, 35, 70],
-    "English": [55, 80, 50, 85, 45, 60],
-    "Science": [40, 85, 55, 80, 40, 75],
-    "History": [50, 70, 45, 88, 30, 65],
-    "Pass_Fail": [0, 1, 0, 1, 0, 1]  # 0 = Fail, 1 = Pass
-}
-df = pd.DataFrame(data)
+# Function to train and return the model
+def train_model(data):
+    # Encode categorical columns
+    label_encoder = LabelEncoder()
+    data['Previous_Purchase'] = label_encoder.fit_transform(data['Previous_Purchase'])  # Yes=1, No=0
+    data['Purchased'] = label_encoder.fit_transform(data['Purchased'])  # Yes=1, No=0
 
-# Features and target
-X = df[["Math", "English", "Science", "History"]]
-y = df["Pass_Fail"]
+    # Define features (X) and target (y)
+    X = data.drop(columns=["Customer_ID", "Purchased"])
+    y = data["Purchased"]
 
-# Train-test split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Train logistic regression model
-model = LogisticRegression()
-model.fit(X_train, y_train)
+    # Train the Random Forest Classifier
+    model = RandomForestClassifier(random_state=42)
+    model.fit(X_train, y_train)
 
-# Streamlit app
-st.title("Student Pass/Fail Prediction App")
+    # Evaluate the model (you can display this if needed)
+    y_pred = model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
 
-st.write("""
-This app predicts whether a student will pass or fail based on their marks in Math, English, Science, and History.
-""")
+    return model, label_encoder, accuracy
 
-# Input form
-math = st.number_input("Enter Math marks:", min_value=0, max_value=100, value=50)
-english = st.number_input("Enter English marks:", min_value=0, max_value=100, value=50)
-science = st.number_input("Enter Science marks:", min_value=0, max_value=100, value=50)
-history = st.number_input("Enter History marks:", min_value=0, max_value=100, value=50)
+# Streamlit UI
+def main():
+    st.title("Customer Purchase Prediction")
 
-# Prediction button
-if st.button("Predict"):
-    # Prepare input data
-    new_student = pd.DataFrame({
-        "Math": [math],
-        "English": [english],
-        "Science": [science],
-        "History": [history]
-    })
+    # Upload CSV file
+    uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
-    # Make prediction
-    prediction = model.predict(new_student)
-    result = "Pass" if prediction[0] == 1 else "Fail"
+    if uploaded_file is not None:
+        # Read the uploaded CSV into a DataFrame
+        df = pd.read_csv(uploaded_file)
+        st.write("Dataset Preview:")
+        st.write(df.head())
 
-    st.write(f"The predicted result for the student is: **{result}**")
+        # Train model on the uploaded dataset
+        model, label_encoder, accuracy = train_model(df)
+        st.write(f"Model accuracy: {accuracy:.2f}")
+
+        # Predict using the trained model
+        features = df.drop(columns=["Customer_ID", "Purchased"])
+        features['Previous_Purchase'] = label_encoder.transform(features['Previous_Purchase'])
+
+        predictions = model.predict(features)
+
+        # Convert predictions to 'Yes'/'No'
+        predictions = label_encoder.inverse_transform(predictions)
+        df['Predicted_Purchase'] = predictions
+
+        # Show the prediction results with Customer_ID
+        st.write("Customer Purchase Predictions:")
+        st.write(df[['Customer_ID', 'Predicted_Purchase']])
+
+        # Allow user to download the result as a CSV
+        csv = df[['Customer_ID', 'Predicted_Purchase']].to_csv(index=False)
+        st.download_button(
+            label="Download Predictions",
+            data=csv,
+            file_name="customer_predictions.csv",
+            mime="text/csv"
+        )
+
+        # Provide a template to add data
+        st.write("Download the template to add new customer data:")
+        template_data = {
+            "Customer_ID": ["", "", ""],
+            "Age": [None, None, None],
+            "Income ($)": [None, None, None],
+            "Browsing_Time (minutes)": [None, None, None],
+            "Items_in_Cart": [None, None, None],
+            "Previous_Purchase": ["", "", ""]
+        }
+        template_df = pd.DataFrame(template_data)
+        template_csv = template_df.to_csv(index=False)
+        st.download_button(
+            label="Download Template",
+            data=template_csv,
+            file_name="customer_data_template.csv",
+            mime="text/csv"
+        )
+
+if __name__ == "__main__":
+    main()
