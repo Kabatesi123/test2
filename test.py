@@ -30,6 +30,18 @@ def train_model(data):
 
     return model, label_encoder, accuracy
 
+# Function to handle unseen labels in 'Previous_Purchase' during prediction
+def handle_unseen_labels(features, label_encoder):
+    # Ensure the label_encoder sees all possible categories
+    known_labels = label_encoder.classes_
+    
+    # Map unseen labels to a default (e.g., 'No')
+    features['Previous_Purchase'] = features['Previous_Purchase'].apply(
+        lambda x: x if x in known_labels else 'No'
+    )
+    
+    return label_encoder.transform(features['Previous_Purchase'])
+
 # Streamlit UI
 def main():
     st.title("Customer Purchase Prediction")
@@ -49,7 +61,9 @@ def main():
 
         # Predict using the trained model
         features = df.drop(columns=["Customer_ID", "Purchased"])
-        features['Previous_Purchase'] = label_encoder.transform(features['Previous_Purchase'])
+        
+        # Handle unseen labels in the 'Previous_Purchase' column
+        features['Previous_Purchase'] = handle_unseen_labels(features, label_encoder)
 
         predictions = model.predict(features)
 
